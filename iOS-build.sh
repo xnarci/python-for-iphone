@@ -1,6 +1,8 @@
 #!/bin/zsh
 set -o errexit
 
+echo "Starting =========="
+
 # credit to:
 # http://randomsplat.com/id5-cross-compiling-python-for-embedded-linux.html
 # http://latenitesoft.blogspot.com/2008/10/iphone-programming-tips-building-unix.html
@@ -15,13 +17,23 @@ fi
 # get rid of old build
 rm -rf Python-2.6.5
 
-# build for native machine
 tar -xjf Python-2.6.5.tar.bz2
 pushd ./Python-2.6.5
-CC=clang ./configure
-make python.exe Parser/pgen
 
-mv python.exe hostpython
+# Patch Python for OSX because there is no _environ symbol on OSX
+patch -p0 < ../environ_symbol_fix.patch
+
+echo "Building for native machine ============================================"
+# Compile some stuff statically; Modules/Setup taken from pgs4a-kivy
+cp ../ModulesSetup Modules/Setup.local
+
+CC=clang ./configure
+
+#make python.exe Parser/pgen
+make python Parser/pgen
+
+#mv python.exe hostpython
+mv python hostpython
 mv Parser/pgen Parser/hostpgen
 
 make distclean
@@ -29,6 +41,8 @@ make distclean
 # patch python to cross-compile
 patch -p1 < ../Python-2.6.5-xcompile.patch
 
+echo "Building for iPhone Simulator ==========================================="
+export MACOSX_DEPLOYMENT_TARGET=10.6
 # set up environment variables for simulator compilation
 export DEVROOT="/Developer/Platforms/iPhoneSimulator.platform/Developer"
 export SDKROOT="$DEVROOT/SDKs/iPhoneSimulator${IOS_VERSION}.sdk"
@@ -48,9 +62,12 @@ export CFLAGS="$CPPFLAGS -pipe -no-cpp-precomp -isysroot $SDKROOT"
 export LDFLAGS="-isysroot $SDKROOT"
 export CPP="/usr/bin/cpp $CPPFLAGS"
 
-# build for iPhone Simulator
+# Compile some stuff statically; Modules/Setup taken from pgs4a-kivy
+cp ../ModulesSetup Modules/Setup.local
+
 ./configure CC="$DEVROOT/usr/bin/i686-apple-darwin10-llvm-gcc-4.2 -m32" \
             LD="$DEVROOT/usr/bin/ld" --disable-toolbox-glue --host=i386-apple-darwin --prefix=/python
+
 make HOSTPYTHON=./hostpython HOSTPGEN=./Parser/hostpgen \
      CROSS_COMPILE_TARGET=yes
 
@@ -58,6 +75,9 @@ mv libpython2.6.a libpython2.6-i386.a
 
 make distclean
 
+export MACOSX_DEPLOYMENT_TARGET=
+
+echo "Building for iOS ======================================================="
 # set up environment variables for cross compilation
 export DEVROOT="/Developer/Platforms/iPhoneOS.platform/Developer"
 export SDKROOT="$DEVROOT/SDKs/iPhoneOS${IOS_VERSION}.sdk"
@@ -81,7 +101,9 @@ export CPP="/usr/bin/cpp $CPPFLAGS"
 mkdir extralibs
 ln -s "$SDKROOT/usr/lib/libgcc_s.1.dylib" extralibs/libgcc_s.10.4.dylib
 
-# build for iPhone
+# Compile some stuff statically; Modules/Setup taken from pgs4a-kivy
+cp ../ModulesSetup Modules/Setup.local
+
 ./configure CC="$DEVROOT/usr/bin/arm-apple-darwin10-llvm-gcc-4.2" \
             LD="$DEVROOT/usr/bin/ld" --disable-toolbox-glue --host=armv6-apple-darwin --prefix=/python
 
